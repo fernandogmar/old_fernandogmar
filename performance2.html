@@ -1,0 +1,704 @@
+<html><head>
+  <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+  <title>Smart infinite scroller - jsFiddle demo</title>
+  
+    
+      <script type="text/javascript" src="https://rawgit.com/muut/riotjs/master/riot.js"></script>
+    
+  
+  
+    
+      <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/underscore.js/1.8.3/underscore-min.js"></script>
+    
+  
+  <style type="text/css">
+.item {
+    background-color: #EFB880;
+    height: 40px;
+}
+
+.page {
+    background-color: #EEA99E;
+}
+
+block {
+    display: block;
+}
+
+.chapter {
+    background-color: #BDB1B3;
+}
+
+.book {
+    background-color: #6EC9B8;
+}
+
+.clickable:hover {
+    background-color: #D0D476;
+}
+  </style>
+  
+
+
+<script type="text/javascript">//<![CDATA[ 
+window.onload=function(){
+
+var RiotControl = {
+  _stores: [],
+  addStore: function(store) {
+    this._stores.push(store);
+  },
+  removeStore: function(store){
+    var index = this._stores.indexOf(store);
+    if(index > -1) {
+        this._stores.splice(index, 1);
+    }
+  }
+
+};
+
+['on','one','off','trigger'].forEach(function(api){
+  RiotControl[api] = function() {
+    var args = [].slice.call(arguments);
+    this._stores.forEach(function(el){
+      el[api].apply(null, args);
+    });
+  };
+});
+    
+var configuration = {
+    total_items: 100000,
+    item_min_height: 40,
+    shelves_per_library: false,
+    books_per_shelf:   10,
+    chapters_per_book: 10,
+    pages_per_chapter: 10,
+    items_per_page: 20
+};
+
+//TODO use Actions idea from refluxjs
+function Item(number){
+    var item = this;
+    
+    riot.observable(item);
+    
+    item.init = function(options) {
+        item.number = options.number;
+        RiotControl.trigger(item.name + '_created', item);
+    };
+    
+    item.destroy = function(){
+        item.off('*');
+        RiotControl.trigger(item.name + '_destroyed', item);
+    };
+    
+    item.is_item = true;
+}
+
+Item.prototype.name = 'item';
+Item.prototype.limit = 1;
+Item.prototype.item_height = configuration.item_min_height;
+
+var store_factory = {
+    create: function(options) {
+        options = options || {};
+        
+        var id = _.uniqueId();
+        
+        function Store() {
+            var store = this;
+            
+            riot.observable(store);
+            store.items = [];
+            
+            store.destroy = function() {
+                store.off('*');
+                RiotControl.trigger(store.name + '_destroyed', store);
+            };
+            
+            store.init = _.once(function(options) {
+                store.number = options.number;
+                store.first = options.first || 0;
+                store.limit = options.limit || store.limit;
+                
+                store.on(store.item_name + '_created', store.addItem);
+                store.on(store.item_name + '_destroyed', store.removeItem);
+                
+                RiotControl.trigger(store.name + '_created', store);
+            });
+            
+            store.addItem = function(item){
+                if(item.number >= store.first) {
+                    var position = item.number - store.first;
+                    
+                    if(!store.limit || (store.limit && position < store.limit) ) {
+                        store.items[position] = item;
+                    }
+                }
+            }
+            
+            store.removeItem = function(item){
+                if(item.number >= store.first) {
+                    var position = item.number - store.first;
+                    
+                    if(!store.limit || (store.limit && position < store.limit) ) {
+                        delete store.items[position];
+                    }
+                }
+            }
+        };
+            
+        var StorePro = Store.prototype;
+        
+        StorePro.name = options.store_name || ('store' + id);
+        StorePro.item_name = options.item_name || ('item' + id);
+        StorePro.limit = options.limit;
+        StorePro.item_height = options.item_height;
+        
+        return Store;
+    }
+}
+
+//var Library = store_factory.create('library', 'book');
+
+function group(total, per_group) {
+    return Math.ceil(total / per_group);
+};
+
+var total = {};
+total.item = configuration.total_items;
+total.page = group(total.item, configuration.items_per_page);
+total.chapter = group(total.page, configuration.pages_per_chapter);
+total.book = group(total.chapter, configuration.chapters_per_book);
+total.shelf = group(total.book, configuration.books_per_shelf);
+total.library = 1;
+
+var height = {}
+height.item = configuration.item_min_height;
+height.page = configuration.items_per_page  * height.item; 
+height.chapter = configuration.pages_per_chapter * height.page;
+height.book = configuration.chapters_per_book * height.chapter;
+height.shelf = configuration.books_per_shelf * height.book;    
+height.library = (configuration.shelves_per_library || total.shelf) * height.shelf;    
+    function getStoreName(Store) {
+        return Store.prototype.name;
+    }
+    
+    function getItemName(Store) {
+        return Store.prototype.item_name;
+    }
+    
+    function getStoreHeight(store) {
+        var height_store = height[store.name];
+        var total_store = total[store.name];
+        
+        if(store.number < total_store - 1) {
+            return height_store;
+        } else {
+           return height_store + (total.item * height.item - total_store * height_store);//base item
+        }
+    }
+
+var Library = store_factory.create({
+    store_name: 'library',
+    item_name: 'shelf',
+    item_height: height.shelf,
+    limit: configuration.shelves_per_library || total.shelf
+});
+
+var Shelf = store_factory.create({
+    store_name: 'shelf',
+    item_name: 'book',
+    item_height: height.book,
+    limit: configuration.books_per_shelf
+})
+
+var Book = store_factory.create({
+    store_name: 'book',
+    item_name: 'chapter',
+    item_height: height.chapter,
+    limit: configuration.chapters_per_book
+});
+
+var Chapter = store_factory.create({
+    store_name: 'chapter',
+    item_name: 'page',
+    item_height: height.page,
+    limit: configuration.pages_per_chapter
+});
+
+var Page = store_factory.create({
+    store_name: 'page',
+    item_name: 'item',
+    item_height: height.item,
+    limit: configuration.items_per_page
+});
+
+
+
+function Bookbinder(stores, options){
+    riot.observable(this);
+    
+    var bookbinder = this;
+    bookbinder.stores = {};
+    
+    _(stores).each(function(Store){
+        var store_name = getStoreName(Store);
+        var item_name = getItemName(Store);
+        var cache_name = store_name + '_cache';
+        
+        bookbinder[cache_name] = {};
+            
+        var action = {
+            add: store_name + '_add',
+            remove: store_name + '_remove',
+            open: store_name + '_open',
+            close: store_name + '_close',
+            toggle: store_name + '_toggle',
+            changed: store_name + '_changed',
+            item_add: item_name + '_add',
+            item_remove: item_name + '_remove',
+            refresh: 'refresh'
+        }
+        
+        function createStore(number){
+            var store = new Store();
+            
+            var first = 0;
+            if(store.limit) {
+                first =  number * store.limit;
+            }
+            
+            RiotControl.addStore(store);
+            store.init({
+                number: number,
+                first:  first
+            });
+            store.height = getStoreHeight(store);
+            store.top = (store.limit * store.item_height ) * store.number;
+            store.bottom = store.top + store.height;
+
+            if (store.item_name) {
+                store.on(action.refresh, function(){
+                    setTimeout(function(){//less priority
+                        var store =  bookbinder[cache_name][number];
+                        bookbinder.toggle(store, action);
+                    });
+                });
+
+                bookbinder.toggle(store, action);
+            }
+            
+            bookbinder[cache_name][number] = store;
+            
+            return store;
+        }
+                           
+        bookbinder.on(action.add, function(number, callback){
+            var store =  bookbinder[cache_name][number];
+            
+            if(!store) {
+                store = createStore(number);
+            }
+            
+            if(callback) {
+                callback(store);
+            }
+        });  
+    
+        bookbinder.on(action.remove,function(number){
+            var store = bookbinder[cache_name][number];
+            if(store) {
+                RiotControl.removeStore(store);
+                store.destroy();
+                delete bookbinder[cache_name][number];
+            }
+        });
+        
+        
+        if(!item_name) {// only for stores with item name
+            return;
+        }
+        
+        bookbinder.on(action.open, function(number){
+            var store =  bookbinder[cache_name][number];
+            bookbinder.open(store, action);
+        });
+        
+        bookbinder.on(action.close, function(number){
+            var store =  bookbinder[cache_name][number];
+            bookbinder.close(store, action);
+        });
+
+        bookbinder.on(action.toggle, function(number){
+            setTimeout(function(){//less priority
+                var store =  bookbinder[cache_name][number];
+                bookbinder.toggle(store, action);
+            });
+        });
+    });
+
+    bookbinder.close = function(store, action) {
+            
+        if(store && store.open) {
+            var number = store.first;
+            var limit = store.first + store.limit
+            for(number; number < limit; number++){
+                bookbinder.trigger(action.item_remove, number);
+            };
+            
+            store.open = false;
+            RiotControl.trigger(action.changed, store);
+            //bookbinder.update();
+        }
+
+    };
+
+    bookbinder.open = function(store, action){
+   
+        if(!store || store.open) {
+            return;
+        }
+        
+        var number = store.first;
+        var limit = store.first + store.limit;
+        var total_items = total[store.item_name];
+        
+        if(limit > total_items) {
+             limit = total_items;           
+        }
+        
+        for(number; number < limit; number++){
+            bookbinder.trigger(action.item_add, number);
+        };
+        
+        store.open = true;
+        RiotControl.trigger(action.changed, store);
+        //bookbinder.update();
+    };
+
+    bookbinder.toggle = function(store, action) {
+
+        if(!store) {
+            return;
+        }
+
+        if(store.open) {
+            if(isOutTriggerZoneY(store)) {
+                bookbinder.close(store, action);
+            }
+        } else {
+            if(isInTriggerZoneY(store)) {
+                bookbinder.open(store, action);
+            }
+        }
+    };
+
+    bookbinder.update = _.throttle(function(){
+        riot.update();
+    }, 100, {leading: false});
+};
+
+
+
+riot.tag('block', 
+         '<div class="{ type } clickable" if="{ !store.open && !store.is_item }" onclick="{ unfold }"></div>' + 
+         '<block each="{ item in store.items }" type="{ item.name }" number="{ item.number }" class="{ item.name }"></block>' +
+         '<item if="{ store.is_item }" type="{ store.name }" number="{ store.number }" ></item>'
+, function(options){
+    var block_tag = this; 
+    
+    block_tag.type = options.type;
+    block_tag.number = parseInt(options.number);
+    
+    var action = {
+        add: block_tag.type + '_add',
+        remove: block_tag.type + '_remove',
+        open: block_tag.type + '_open',
+        close: block_tag.type + '_close',
+        toggle: block_tag.type + '_toggle',
+        changed: block_tag.type + '_changed'
+    }
+    
+    block_tag.unfold = function(){
+        RiotControl.trigger(action.open, block_tag.number);
+    }
+    
+    block_tag.fold = function(){
+        RiotControl.trigger(action.close, block_tag.number);
+    }
+    
+    block_tag.toggle = function(){
+        RiotControl.trigger(action.toggle, block_tag.number);
+    }
+        
+    block_tag.on('mount', function() {
+    });
+    
+    block_tag.on('unmount', function() {    
+        RiotControl.trigger(action.remove, block_tag.number);
+    });
+    
+    RiotControl.trigger(action.add, block_tag.number, function(store){
+        block_tag.store = store;
+        
+        store.on(action.changed, function(store){
+            if(store.number === block_tag.number) {
+                block_tag.store = store;
+                block_tag.update();
+            }
+        });
+    });
+});
+
+
+riot.tag('item', 
+         '<div class="item clickable">item</div>'
+, function(options){
+    var item_tag = this; 
+    
+    item_tag.type = options.type;
+    item_tag.number = parseInt(options.number);
+    
+    var action = {
+        remove: item_tag.type + '_remove'
+    }
+    
+    item_tag.on('unmount', function() {    
+        RiotControl.trigger(action.remove, item_tag.number);
+    });
+    
+});
+
+riot.tag('raw', '', function(options) {   
+    this.root.innerHTML = opts.r;
+});
+
+riot.tag('it', '<span>hello <inner-html/></span>',function(options){
+
+});
+
+riot.tag('inner-html','', function(options){
+  var p = this.parent.root;
+  while (p.firstChild) this.root.appendChild(p.firstChild);
+});
+
+// demo
+var demo = {};
+
+demo.init = function(){
+    var css = _(height).keys().map(function(type){
+        return blockClass(type, height[type]);
+    });
+    createCss(css.join('\n'));
+
+    riot.mount('block');
+}
+
+demo.create= function(total, Element) {
+    var i, items = [];
+    for(i=0; i < total; i++) {
+        items.push(new Element(i));
+    }
+    
+    return items;
+};
+
+demo.items = demo.create(configuration.total_items, Item);
+
+var stores = [Library, Shelf, Book, Chapter, Page, Item];
+demo.bookbinder = new Bookbinder(stores);
+
+RiotControl.addStore(demo.bookbinder);
+RiotControl.trigger('total_changed', demo.items.length);
+
+// logic for open/close
+var bookbinder = demo.bookbinder;
+
+//var screen = document.getElementsByClassName('screen')[0];
+//screen_rect = screen.getBoundingClientRect();
+
+
+var cushion = height.page / 2;
+var zone = {};
+var scroll_top;
+var screen = document.getElementsByTagName('body')[0];
+
+function calculateZone(top, height){
+    height = height || zone.screen_height || 0;
+
+    zone = {
+        top: top,
+        bottom: top + height,
+        screen_height: height
+    };
+
+}
+
+function refreshZone() {
+    var top = zone.top || 0;// on resize there is no change on the top
+    var height = screen.clientHeight;
+    
+    calculateZone(top, height);
+}
+
+
+function inY(value, cushion){
+    cushion = cushion || 0;
+
+    return (zone.top - cushion) < value && value < (zone.bottom + cushion);
+}
+
+function containY(top, bottom) {
+    return top < zone.top && zone.bottom < bottom; 
+}
+
+function isInTriggerZoneY(store) {
+    var cushion = store.height / 2;
+
+    return inY(store.top, cushion) || inY(store.bottom, cushion) || containY(store.top, store.bottom);
+}
+
+function isOutTriggerZoneY(store) {
+    return !isInTriggerZoneY(store);
+}
+
+
+var refreshOnScroll = _.throttle(function(){
+    calculateZone(screen.scrollTop);
+    RiotControl.trigger('refresh');
+}, 300, {leading: false});
+
+var refreshOnResize = _.throttle(function(){
+    refreshZone();
+    RiotControl.trigger('refresh');
+}, 700, {leading: false});
+
+var refreshOnScrollAsync = function() {
+    setTimeout(refreshOnScroll);
+}
+
+var refreshOnResizeAsync = function() {
+    setTimeout(refreshOnResize);
+}
+
+refreshZone();
+window.addEventListener('resize', refreshOnResizeAsync, false);
+window.addEventListener('scroll', refreshOnScrollAsync, false);
+
+function blockClass(type, height) {
+    return '.'+ type + ' { height: ' + height + 'px; }';
+}
+
+function createCss(css) {
+    var style = document.createElement('style');
+    style.type = 'text/css';
+    style.innerHTML = css;
+    document.getElementsByTagName('head')[0].appendChild(style);
+}
+
+demo.init();
+
+}//]]>  
+
+</script>
+
+
+</head>
+<body>
+  <block type="library" number="0" class="library"></block>
+  <script>
+(function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);throw new Error("Cannot find module '"+o+"'")}var f=n[o]={exports:{}};t[o][0].call(f.exports,function(e){var n=t[o][1][e];return s(n?n:e)},f,f.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
+"use strict";
+var support = require("./utils").support;
+var dispatchClick = require("./utils").dispatchClick;
+
+if (typeof document.addEventListener !== 'function') {
+    return;
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    if(!support) {
+        return;
+    }
+
+    var cover = document.createElement('div'),
+        body = document.body,
+        coverStyle = cover.style,
+        scrollStarted = false,
+        timer,
+        clicked = false,
+        pos = { x: 0, y: 0 };
+
+    coverStyle.cssText = [
+        '-webkit-transform: translate3d(0,0,0);',
+        'transform: translate3d(0,0,0);',
+        'position: fixed;',
+        'top: 0;',
+        'right: 0;',
+        'left: 0;',
+        'bottom: 0;',
+        'opacity: 0;',
+        'z-index: 2147483647;',
+        'pointer-events: none'
+    ].join('');
+    body.appendChild(cover);
+
+    window.addEventListener('scroll', function scroll() {
+        if(!scrollStarted) {
+            coverStyle.pointerEvents = 'auto';
+            scrollStarted = true;
+        }
+        clearTimeout(timer);
+
+        timer = setTimeout(function(){
+            coverStyle.pointerEvents = 'none';
+            scrollStarted = false;
+            if(clicked) {
+                dispatchClick(pos);
+                clicked = false;
+            }
+        },500);
+    }, false);
+
+    // capture all clicks and store x, y coords for later
+    document.addEventListener('click', function clickCatcher(event) {
+        if(event.target === cover && !event.synthetic) {
+            pos.x = event.clientX;
+            pos.y = event.clientY;
+            clicked = true;
+        }
+    }, false);
+}, false);
+},{"./utils":2}],2:[function(require,module,exports){
+"use strict";
+var support = (function support() {
+    var element = document.createElement('x');
+    element.style.cssText = 'pointer-events:auto';
+    return element.style.pointerEvents === 'auto';
+}());
+
+function dispatchClick(coords) {
+    var event = document.createEvent('MouseEvent'),
+        elem = document.elementFromPoint(coords.x, coords.y);
+
+    event.initMouseEvent(
+        'click',
+        true /* bubble */, true /* cancelable */,
+        window, null,
+        coords.x, coords.y, 0, 0, /* coordinates */
+        false, false, false, false, /* modifier keys */
+        0 /*left*/, null
+    );
+    event.synthetic = true;
+
+    elem.dispatchEvent(event);
+}
+
+exports.support = support;
+exports.dispatchClick = dispatchClick;
+},{}]},{},[1])
+
+  </script>
+</body>
+</html>
