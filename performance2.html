@@ -42,6 +42,15 @@ block {
 
 <script type="text/javascript">//<![CDATA[ 
 window.onload=function(){
+var configuration = {
+    total_items: 1000000,
+    item_min_height: 40,
+    shelves_per_library: false,
+    books_per_shelf:   10,
+    chapters_per_book: 10,
+    pages_per_chapter: 10,
+    items_per_page: 20
+};
 
 var RiotControl = {
   _stores: [],
@@ -65,16 +74,8 @@ var RiotControl = {
     });
   };
 });
-    
-var configuration = {
-    total_items: 100000,
-    item_min_height: 40,
-    shelves_per_library: false,
-    books_per_shelf:   10,
-    chapters_per_book: 10,
-    pages_per_chapter: 10,
-    items_per_page: 20
-};
+
+
 
 //TODO use Actions idea from refluxjs
 function Item(number){
@@ -175,11 +176,11 @@ total.library = 1;
 
 var height = {}
 height.item = configuration.item_min_height;
-height.page = configuration.items_per_page  * height.item; 
-height.chapter = configuration.pages_per_chapter * height.page;
-height.book = configuration.chapters_per_book * height.chapter;
-height.shelf = configuration.books_per_shelf * height.book;    
-height.library = (configuration.shelves_per_library || total.shelf) * height.shelf;    
+height.page = (Math.min(configuration.items_per_page, total.item) || total.item)  * height.item; 
+height.chapter = (Math.min(configuration.pages_per_chapter, total.page) || total.page) * height.page;
+height.book = (Math.min(configuration.chapters_per_book, total.chapter) || total.chapter) * height.chapter;
+height.shelf = (Math.min(configuration.books_per_shelf, total.book) || total.book) * height.book;    
+height.library = (Math.min(configuration.shelves_per_library, total.shelf) || total.shelf) * height.shelf;    
     function getStoreName(Store) {
         return Store.prototype.name;
     }
@@ -537,7 +538,7 @@ function calculateZone(top, height){
 
 function refreshZone() {
     var top = zone.top || 0;// on resize there is no change on the top
-    var height = screen.clientHeight;
+    var height = window.innerHeight; // when it will be fix height screen.clientHeight;
     
     calculateZone(top, height);
 }
