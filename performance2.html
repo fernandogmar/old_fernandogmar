@@ -180,7 +180,7 @@ height.page = (Math.min(configuration.items_per_page, total.item) || total.item)
 height.chapter = (Math.min(configuration.pages_per_chapter, total.page) || total.page) * height.page;
 height.book = (Math.min(configuration.chapters_per_book, total.chapter) || total.chapter) * height.chapter;
 height.shelf = (Math.min(configuration.books_per_shelf, total.book) || total.book) * height.book;    
-height.library = (Math.min(configuration.shelves_per_library, total.shelf) || total.shelf) * height.shelf;    
+height.library = total.item * height.item;//quick fix last level just one  
     function getStoreName(Store) {
         return Store.prototype.name;
     }
