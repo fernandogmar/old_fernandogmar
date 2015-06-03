@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html><head><style type="text/css">@charset "UTF-8";[ng\:cloak],[ng-cloak],[data-ng-cloak],[x-ng-cloak],.ng-cloak,.x-ng-cloak,.ng-hide:not(.ng-hide-animate){display:none !important;}ng\:form{display:block;}</style>
   <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>mega angular scroller - jsFiddle demo</title>
   
   <script type="text/javascript" src="//code.jquery.com/jquery-1.8.3.js"></script>
@@ -28,26 +29,16 @@
   -webkit-box-sizing: border-box; /* Safari/Chrome, other WebKit */
 -moz-box-sizing: border-box;    /* Firefox, other Gecko */
 box-sizing: border-box;         /* Opera/IE 8+ */
-    background-color: #f3f3f3;
 }
 *, *:before, *:after {
   box-sizing: inherit;
 }
-.info {
-    position: fixed;
-    bottom: 0;
-    right: 0;
-    color: white;
-    background: rgb(33, 181, 237); /* Fall-back for browsers that don't
-                                    support rgba */
-    background: rgba(33, 181, 237, .5);
-    padding: 1em;
-}
+
 .item {
     min-height: 40px;
-    /*margin: 1px 0;*/
+    margin: 1px 0;
     padding: 0.5em;
-    border-bottom: 2px solid #F3F3F3;
+    background-color: white;
 }
 
 
@@ -55,8 +46,8 @@ block, item {
     display: block;
 }
 
-.megascroller, .item {
-    background-color: white;
+.megascroller {
+    background-color: #F3F3F3;
 }
 
 .clickable:hover {
@@ -75,7 +66,7 @@ block, item {
 <script type="text/javascript">//<![CDATA[ 
 $(window).load(function(){
 var configuration = {
-    total_items: 1000,
+    total_items: 100000,
     item_min_height: 40,
     chapters_per_book: false,
     pages_per_chapter: 5,
@@ -213,7 +204,6 @@ height.item = configuration.item_min_height;
 height.page = (Math.min(configuration.items_per_page, total.item) || total.item)  * height.item; 
 height.chapter = (Math.min(configuration.items_per_page * configuration.pages_per_chapter, total.item) || total.item)  * height.item; 
 
-var half = false;
 var contact_api = {
     id: function(contact) {
         return contact.id;
@@ -264,22 +254,9 @@ var contact_api = {
     order_dsc: false,
     fetch: function(first, last, callback) {
         setTimeout(function(){
-            
-            /*var random_contacts;
-            if(first > contacts.length / 3) {
-                half = true;
-            }
-            
-            if (!half){
-            */
-                random_contacts = contacts;
-            /*} else {
-                random_contacts = contacts.slice(0, contacts.length / 2 );
-            }*/
-            
             callback({
-                items: random_contacts.slice(first, last + 1),
-                total_items: random_contacts.length
+                items: contacts.slice(first, last + 1),
+                total_items: contacts.length
             });
         }, 300);
     }
@@ -297,8 +274,8 @@ function ItemStore(item_api){
     item_store.round = 0;
     
     item_store.on('display', function(first, last){
-         item_store.displayed_bunch = new Bunch(first, last);
-         item_store.updateDisplayedBunch(item_store.fetched_bunches);
+        item_store.displayed_bunch = item_store.getBunch(first, last);
+        item_store.trigger('changed', item_store.displayed_bunch);
     });
     
     item_store.on('fetch', function(first, last, more){
@@ -342,18 +319,10 @@ function ItemStore(item_api){
 
 var ItemStorePro = ItemStore.prototype;
 
-ItemStorePro.totalItems = function(){
-    var item_store = this;
-    var length = item_store.fetched_bunches.length;
-    if(length) {
-        return item_store.fetched_bunches[length - 1].total_items;
-    }
-};
-
 ItemStorePro.getBunch = function(first, last) {
     var item_store = this;
     
-    var bunch = new Bunch(first, last);    
+    var bunch = new Bunch(first, last);
     bunch.update(item_store.fetched_bunches);
     
     return bunch;
@@ -362,21 +331,9 @@ ItemStorePro.getBunch = function(first, last) {
 ItemStorePro.updateDisplayedBunch = function(bunches) {
     var item_store = this;
     
-    var total_items, displayed_size;
     var displayed_bunch = item_store.displayed_bunch;
-    
-    if(displayed_bunch){
-        total_items = item_store.totalItems();
-        
-        if(_.isNumber(total_items) && total_items < displayed_bunch.last + 1 ) {
-            displayed_size = displayed_bunch.size();
-            displayed_bunch.last = total_items > 0? total_items - 1 : 0;
-            displayed_bunch.first = Math.max(0, displayed_bunch.last - displayed_size);
-        }
-        
-        if(displayed_bunch.update(bunches)) {
-            item_store.trigger('changed', displayed_bunch);
-        }
+    if(displayed_bunch && displayed_bunch.update(bunches)) {
+        item_store.trigger('changed', displayed_bunch);
     }
 };
 
@@ -586,7 +543,7 @@ function Megascroller(item_store){
         });
         
         megascroller.chapters = next_open_chapters;
-    }, 100);
+    }, 0);
 };
 
 
@@ -615,23 +572,9 @@ function Zone(screen, cushion){
         zone.removeCover();
     }
     
-    var time_before;
-    var position_before;
-    
-    var refreshOnScroll = _.throttle(function(e){
-        var position = zone.element.scrollTop;
-        zone.change(position);
-        
-        if(time_before) {
-            var delta_t = e.timeStamp - time_before;
-            var delta_p = position - position_before;
-        }
-        time_before = e.timeStamp;
-        position_before = position;
-        
-        //console.log(delta_p/delta_t);
-        
-    }, 10, {leading: false});
+    var refreshOnScroll = _.throttle(function(){
+        zone.change(zone.element.scrollTop);
+    }, 100, {leading: false});
     
     var refreshOnResize = _.throttle(function(){
         zone.resize();
@@ -786,7 +729,7 @@ var megascrollerDirective = function(){
         restrict: 'A',
         scope: {},
         replace: false,
-        template: '<div class="megascroller" ng-style="style"><item ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="{{ displayed_bunch.first + $index }}"></item></div><div class="info"><div>Total items: <span ng-bind="displayed_bunch.total_items"></span></div><div>Displayed: <span ng-bind="displayed_bunch.first"></span>, <span ng-bind="displayed_bunch.last"></span></div></div>',
+        template: '<div class="megascroller" ng-style="style"><item ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="{{ displayed_bunch.first + $index }}"></div>',
         link: function(scope, element, attrs){
             var megascroller_tag = scope;
     
@@ -847,7 +790,7 @@ $(document).ready(function() {
 
 </head>
 <body>
-  <div id="demo" megascroller="" class="ng-isolate-scope"><div class="megascroller" ng-style="style" style="height: 40000px; padding-top: 31200px;"><!-- ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="780">780.- Lauren Smith</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="781">781.- Laura Brown</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="782">782.- Laura Walschot</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="783">783.- Lauren Williams</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="784">784.- John Martin</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="785">785.- Chris Andersen</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="786">786.- Tim Boer</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="787">787.- Jane Simpson</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="788">788.- Marge Bond</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="789">789.- Rachel Walschot</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="790">790.- Tom Fallen</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="791">791.- Ted Johnson</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="792">792.- Laura Miles</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="793">793.- Ted Fallen</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="794">794.- Homer Smith</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="795">795.- Rachel Martin</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="796">796.- John Little</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="797">797.- Jane Andersen</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="798">798.- Laura Bond</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="799">799.- Chris Martin</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="800">800.- Mark Bond</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="801">801.- Homer Boer</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="802">802.- Tim Martin</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="803">803.- Ted Boer</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="804">804.- Rachel Johnson</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="805">805.- Ted Fallen</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="806">806.- Bill Boer</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="807">807.- Laura Miles</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="808">808.- Ian Johnson</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="809">809.- Chris Jackson</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="810">810.- Chris Walschot</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="811">811.- Lauren Johnson</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="812">812.- Rachel Boer</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="813">813.- Ted Johnson</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="814">814.- Mary Moore</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="815">815.- Marge Smith</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="816">816.- Tom Miles</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="817">817.- Mark Walschot</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="818">818.- Ian Fallen</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="819">819.- Lisa Miles</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="820">820.- Marge Brown</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="821">821.- Chris Walschot</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="822">822.- Bill Williams</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="823">823.- John Moore</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="824">824.- Lisa Fallen</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="825">825.- Homer Williams</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="826">826.- Ted Bond</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="827">827.- Jane Simpson</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="828">828.- Chris Moore</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="829">829.- John Andersen</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="830">830.- Ian Brown</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="831">831.- Marge Brown</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="832">832.- Rachel Fallen</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="833">833.- Mark Boer</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="834">834.- Mary Little</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="835">835.- Bill Jackson</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="836">836.- Lisa Andersen</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="837">837.- Ted Fallen</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="838">838.- Mark Simpson</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="839">839.- Mary Jackson</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --></div><div class="info"><div>Total items: <span ng-bind="displayed_bunch.total_items" class="ng-binding">1000</span></div><div>Displayed: <span ng-bind="displayed_bunch.first" class="ng-binding">780</span>, <span ng-bind="displayed_bunch.last" class="ng-binding">839</span></div></div><div style="-webkit-transform: translate3d(0px, 0px, 0px); transform: translate3d(0px, 0px, 0px); position: fixed; top: 0px; right: 0px; left: 0px; bottom: 0px; opacity: 0; z-index: 2147483647; pointer-events: none;"></div></div>
+  <div id="demo" megascroller="" class="ng-isolate-scope"><div class="megascroller" ng-style="style" style="height: 4000000px; padding-top: 0px;"><!-- ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="0">0.- Marge Brown</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="1">1.- Jane Moore</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="2">2.- Bill Andersen</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="3">3.- Mark Fallen</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="4">4.- Laura Martin</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="5">5.- Ted Smith</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="6">6.- Homer Fallen</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="7">7.- Laura Boer</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="8">8.- Mary Mak</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="9">9.- Bill Mak</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="10">10.- Mary Moore</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="11">11.- John Fallen</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="12">12.- Tim Jackson</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="13">13.- John Miles</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="14">14.- Marge Little</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="15">15.- Ted Bond</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="16">16.- Tom Moore</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="17">17.- Mary Bond</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="18">18.- Marge Bond</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="19">19.- Mark Boer</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="20">20.- Jane Johnson</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="21">21.- Ian Jackson</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="22">22.- Lauren Moore</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="23">23.- Rachel Williams</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="24">24.- Mark Walschot</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="25">25.- Rachel Bond</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="26">26.- Mary Mak</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="27">27.- Bill Walschot</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="28">28.- Mary Walschot</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="29">29.- Bill Williams</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="30">30.- Bill Jackson</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="31">31.- Laura Walschot</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="32">32.- Tim Smith</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="33">33.- Jane Jackson</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="34">34.- Laura Moore</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="35">35.- Bill Jackson</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="36">36.- Mark Johnson</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="37">37.- Mark Andersen</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="38">38.- Chris Boer</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --><div class="item clickable ng-binding ng-scope" ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="39">39.- Rachel Jackson</div><!-- end ngRepeat: item in displayed_bunch.items track by id($index) --></div><div style="-webkit-transform: translate3d(0px, 0px, 0px); transform: translate3d(0px, 0px, 0px); position: fixed; top: 0px; right: 0px; left: 0px; bottom: 0px; opacity: 0; z-index: 2147483647; pointer-events: none;"></div></div>
 <!--<div id="demo2" megascroller>
 </div>-->
   
