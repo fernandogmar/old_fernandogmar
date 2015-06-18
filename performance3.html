@@ -987,5 +987,9 @@ $(document).ready(function() {
 
 </head>
 <body>
-  <div id="demo" megascroller="" class="ng-isolate-scope"></div>
+  <div class="container-list" ng-controller="demoSettingsController as settings">
+    <div class="list" megascroller="settings.megascroller_options;">
+        <div class="item clickable"><span ng-if="item">{{::item.id}}.- {{::item.name}} {{::item.surname}}</span><span class="loading" ng-show="!item">loading...</span></div>
+    </div>
+</div>
 </body></html>
