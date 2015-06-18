@@ -24,7 +24,7 @@
     
   
   <style type="text/css">
-    html {
+html {
   box-sizing: border-box;    
   -webkit-box-sizing: border-box; /* Safari/Chrome, other WebKit */
 -moz-box-sizing: border-box;    /* Firefox, other Gecko */
@@ -34,15 +34,24 @@ box-sizing: border-box;         /* Opera/IE 8+ */
 *, *:before, *:after {
   box-sizing: inherit;
 }
+
+html, body {
+    height: 100%;
+    margin: 0;
+    padding:0;
+    overflow: hidden;
+}
+
 .info {
     position: fixed;
     bottom: 0;
-    right: 0;
+    left: 50%;
     color: white;
     background: rgb(33, 181, 237); /* Fall-back for browsers that don't
                                     support rgba */
     background: rgba(33, 181, 237, .5);
     padding: 1em;
+    font-size: 0.8em;
 }
 .item {
     min-height: 40px;
@@ -67,11 +76,16 @@ block, item {
     background-color: #FFFFCC;
 }
 
-#demo, #demo2 {
-    height: 400px;
+.container-list {
+    height: 100%;
+    
+}
+
+.list {
+    height: 100%;
     overflow: auto;
     position: relative;
-}
+}    
   </style>
   
 
@@ -94,6 +108,37 @@ _.times(configuration.total_items, function(n){
     var surname = surnames[_.random(0, surnames.length - 1)];
     contacts.push({id: n, name: name, surname: surname });
 })
+
+window.Events = function (target){
+  var events = {}, empty = [];
+  target = target || this
+    /**
+     *  On: listen to events
+     */
+    target.on = function(type, func, ctx){
+      (events[type] = events[type] || []).push([func, ctx])
+    }
+    /**
+     *  Off: stop listening to event / specific callback
+     */
+    target.off = function(type, func){
+      type || (events = {})
+      var list = events[type] || empty,
+      i = list.length = func ? list.length : 0
+      while(i--) func == list[i][0] && list.splice(i,1)
+    }
+
+
+    /** 
+     * Emit: send event, callbacks will be triggered
+     */
+    target.trigger = target.emit = function(type){
+      var args = empty.slice.call(arguments, 1),
+      list = events[type] || empty, i=0, j
+      while(j=list[i++]) j[0].apply(j[1], args)
+    };
+}
+
 /*
 * RetargetMouseScroll JavaScript Library v0.0.2
 * 2009-07-30
@@ -181,41 +226,6 @@ if (typeof this.RetargetMouseScroll !== "function") (function() {
 }).call(this);
 
 //TODO use Actions idea from refluxjs
-function Item(number){
-    var item = this;
-    
-    riot.observable(item);
-    
-    item.init = function(options) {
-        item.number = options.number;
-        item.trigger(item.name + '_created', item);
-    };
-    
-    item.destroy = function(){
-        item.off('*');
-        item.trigger(item.name + '_destroyed', item);
-    };
-    
-    item.is_item = true;
-}
-
-Item.prototype.name = 'item';
-Item.prototype.limit = 1;
-Item.prototype.item_height = configuration.item_min_height;
-
-function group(total, per_group) {
-    return Math.ceil(total / per_group);
-};
-
-var total = {};
-total.item = configuration.total_items;
-total.page = group(total.item, configuration.items_per_page);
-total.chapter = group(total.page, configuration.pages_per_chapter);
-
-var height = {}
-height.item = configuration.item_min_height;
-height.page = (Math.min(configuration.items_per_page, total.item) || total.item)  * height.item; 
-height.chapter = (Math.min(configuration.items_per_page * configuration.pages_per_chapter, total.item) || total.item)  * height.item; 
 
 var half = false;
 var contact_api = {
@@ -289,27 +299,37 @@ var contact_api = {
     }
 };
 
-function ItemStore(item_api){
+function ItemStore(bus, item_api){
     var item_store = this;
-    
-    riot.observable(item_store);
     
     item_store.item_api = item_api || {};
     item_store.limit = 2;
     item_store.fetched_bunches = [];
+    item_store.refused_bunches = [];
     item_store.displayed_bunch = null;
     item_store.round = 0;
+    item_store.bus = bus;
     
-    item_store.on('display', function(first, last){
+    bus.on('bunch.display', function(first, last){
          item_store.displayed_bunch = new Bunch(first, last);
          item_store.updateDisplayedBunch(item_store.fetched_bunches);
     });
     
-    item_store.on('fetch', function(first, last, more){
+    bus.on('bunch.refuse', function(first, last){
+        var round = item_store.round++;
+        
+        var refused_bunch = new Bunch(first, last);
+        refused_bunch.round = round;
+        
+        item_store.refused_bunches.push(refused_bunch);
+        item_store.cleanFetchedBunches();
+    });
+    
+    bus.on('bunch.fetch', function(first, last, more){
         var round = item_store.round++;
         
         item_store.item_api.fetch(first, last, function(response){
-            item_store.trigger('fetched', {
+            bus.trigger('bunch.fetched', {
                 items: response.items,
                 total_items: response.total_items,
                 first: first,
@@ -318,7 +338,7 @@ function ItemStore(item_api){
         });
     });
     
-    item_store.on('fetched', function(fetched_items, round, more){
+    bus.on('bunch.fetched', function(fetched_items, round, more){
         
         var fetched_bunch = new Bunch(fetched_items.first, fetched_items.last);
         fetched_bunch.items = fetched_items.items;
@@ -330,15 +350,16 @@ function ItemStore(item_api){
         
         if(added) {
              item_store.updateDisplayedBunch([fetched_bunch]);
+             item_store.cleanRefusedBunches();
         }
     });
     
-    item_store.on('removed', function(removed_items) {
+    bus.on('store.removed', function(removed_items) {
         item_store.removeItems(removed_items, item_store.item_api.isEqual);
         item_store.updateDisplayedBunch(item_store.fetched_bunches);
     });
     
-    item_store.on('added', function(added_items){
+    bus.on('store.added', function(added_items){
         item_store.addItems(added_items, item_store.item_api._getOrder);
         item_store.updateDisplayedBunch(item_store.fetched_bunches);
     });
@@ -363,6 +384,18 @@ ItemStorePro.getBunch = function(first, last) {
     return bunch;
 };
 
+ItemStorePro.isRefused = function(bunch) {
+    var item_store = this;
+    
+    var refused_bunches = _.reject(item_store.refused_bunches, function(refused_bunch){
+        return refused_bunch.round < bunch.round;
+    });
+    
+    return _.some(refused_bunches, function(refused_bunch){
+        return refused_bunch.includes(bunch);
+    });
+}
+
 ItemStorePro.updateDisplayedBunch = function(bunches) {
     var item_store = this;
     
@@ -379,15 +412,37 @@ ItemStorePro.updateDisplayedBunch = function(bunches) {
         }
         
         if(displayed_bunch.update(bunches)) {
-            item_store.trigger('changed', displayed_bunch);
+            item_store.bus.trigger('bunch.changed', displayed_bunch);
         }
     }
 };
 
+ItemStorePro.cleanRefusedBunches = function() {
+    var item_store = this;
+    
+    var oldest_fetched_bunch = item_store.fetched_bunches[0];
+    item_store.refused_bunches = _.reject(item_store.refused_bunches, function(refused_bunch){
+        return refused_bunch.round < oldest_fetched_bunch.round;
+    });
+};
+
+ItemStorePro.cleanFetchedBunches = function() {
+    var item_store = this;
+    
+    item_store.fetched_bunches = _.reject(item_store.fetched_bunches, function(fetched_bunch){
+        return item_store.isRefused(fetched_bunch);
+    });
+}
+
 ItemStorePro.addFetchedBunch = function(fetched_bunch) {
+    
     var item_store = this;
     var added = true;
     var recent_bunch_index, nomore_bunch_index, first_bunch_index;
+        
+    if(item_store.isRefused(fetched_bunch)) {
+        return false;
+    }
     
     var fetched_bunches = item_store.fetched_bunches;
     if(fetched_bunches.length === 0) {
@@ -472,6 +527,12 @@ BunchPro.fill = function(other_bunch){
     return filled;
 }
 
+BunchPro.includes = function(other_bunch) {
+    var bunch = this;
+
+    return bunch.first <= other_bunch.first && bunch.last >= other_bunch.last;
+}
+
 BunchPro.update = function(other_bunches) {
     var bunch = this;
 
@@ -497,7 +558,7 @@ BunchPro.remove = function(item_to_remove, isEqual){
     var bunch = this;
     var removed = false;
     
-     bunch.total_items = bunch.total_items - 1;
+    bunch.total_items = bunch.total_items - 1;
     
     isEqual = isEqual || bunch.isEqual;
     bunch.items = _.reject(bunch.items, function(item){
@@ -538,19 +599,33 @@ BunchPro.add = function(item_to_add, order) {
 }
 
 
-function Megascroller(item_store){
-    riot.observable(this);
-    
+function Megascroller(bus, item_options){
     var megascroller = this;
+    
+    // reset cache
     megascroller.pages = [];
     megascroller.chapters = [];
     
-    megascroller.on('refresh', function(zone){
+    item_options.total = item_options.per_chapter;
+    megascroller.updateSettings(item_options);
+    megascroller.bus = bus;
+    
+    bus.on('zone.changed', function(zone){
+        var item_options = megascroller.item_options;
+        
+        if(!item_options || !_.isNumber(item_options.total)) {
+            return;
+        }
+        
         megascroller.refreshChapters(zone);
         megascroller.refreshPages(zone);
     });
     
-    megascroller.refreshPages = function(zone){    
+    megascroller.refreshPages = function(zone){
+        var height = megascroller.height;
+        var total = megascroller.total;
+        var item_options = megascroller.item_options;
+        
         var first_page = Math.max( Math.floor((zone.top - zone.cushion) / height.page), 0);
         var last_page =  Math.min( Math.floor((zone.bottom + zone.cushion) / height.page), total.page - 1);
         
@@ -561,48 +636,94 @@ function Megascroller(item_store){
         var pages_to_add = _.difference(next_open_pages, current_open_pages);
         
         if(pages_to_remove.length || pages_to_add.length) {
-            var first_item = first_page * configuration.items_per_page;
-            var last_item = Math.min((last_page + 1) * configuration.items_per_page, total.item) - 1;
+            var first_item = getRange(first_page, item_options.per_page, total.item).first;
+            var last_item =  getRange(last_page, item_options.per_page, total.item).last;  
             
-            item_store.trigger('display', first_item, last_item);
+            bus.trigger('bunch.display', first_item, last_item);
             megascroller.pages = next_open_pages;
         }
     };
     
     megascroller.refreshChapters = _.debounce(function(zone){
-        var items_per_chapter = configuration.pages_per_chapter * configuration.items_per_page;
-        var first_chapter = Math.max( Math.floor((zone.top - zone.cushion) / height.chapter), 0);
-        var last_chapter =  Math.min( Math.floor((zone.bottom + zone.cushion) / height.chapter), total.chapter - 1);
+        var height = megascroller.height;
+        var total = megascroller.total;
+        var item_options = megascroller.item_options;
+        
+        var cushion = height.page;
+        var first_chapter = Math.max( Math.floor((zone.top - cushion) / height.chapter), 0);
+        var last_chapter =  Math.min( Math.floor((zone.bottom + cushion) / height.chapter), total.chapter - 1);
         
         var current_open_chapters = megascroller.chapters;
         var next_open_chapters = _.range(first_chapter, last_chapter + 1);
+        console.log(next_open_chapters);
         
         var chapters_to_remove = _.difference(current_open_chapters, next_open_chapters);
         var chapters_to_add = _.difference(next_open_chapters, current_open_chapters);
+        
+        _.each(chapters_to_remove, function(chapter_number){
+            var range = getRange(chapter_number, item_options.per_chapter, total.item);
+            bus.trigger('bunch.refuse', range.first, range.last);
+        });
         
         _.each(chapters_to_add, function(chapter_number){
             console.log('fetching chapter ', chapter_number);
             console.log(zone.bottom, zone.cushion, height.chapter, Math.floor((zone.bottom + zone.cushion) / height.chapter));
     
-            var first_item = chapter_number * items_per_chapter;
-            var last_item = Math.min((chapter_number + 1) * items_per_chapter, total.item) - 1;
-            item_store.trigger('fetch', first_item, last_item, megascroller.chapters.length);
+            var range = getRange(chapter_number, item_options.per_chapter, total.item);
+            bus.trigger('bunch.fetch', range.first, range.last, megascroller.chapters.length);
         });
         
         megascroller.chapters = next_open_chapters;
     }, 100);
+    
+    bus.on('bunch.fetched', function(bunch){
+        var total = megascroller.total;
+        
+        if(total.item !== bunch.total_items) {
+           megascroller.item_options.total = bunch.total_items;
+           megascroller.updateSettings(megascroller.item_options);
+        }
+    });
+    
+    function getRange(number, amount_of_items, total_items){
+        return {
+            first: number * amount_of_items,
+            last: Math.min((number + 1) * amount_of_items, total_items) - 1
+        }
+    }
 };
 
+var MegaScrollerPro = Megascroller.prototype;
+
+MegaScrollerPro.updateSettings = function(item_options) {
+    
+    if(!item_options || !_.isNumber(item_options.total)) {
+        return;
+    }
+    
+    var total = {};
+    total.item = item_options.total;
+    total.page = Math.ceil(total.item / item_options.per_page);
+    total.chapter = Math.ceil(total.item / item_options.per_chapter);
+
+    var height = {}
+    height.item = item_options.height;
+    height.page = Math.min(item_options.per_page, total.item) * item_options.height; 
+    height.chapter = Math.min(item_options.per_chapter, total.item) * item_options.height;
+    
+    this.total = total;
+    this.height = height;
+    this.item_options = item_options;
+}
 
 
-function Zone(screen, cushion){
+function Zone(bus, screen, cushion){
     var zone = this;
-    riot.observable(zone);
     
     zone.cushion = cushion || 0;
     zone.screen = screen;
     zone.element = screen || document.getElementsByTagName('body')[0];
-    
+    zone.bus = bus;
     
     zone.init = function() {
         zone.resize();
@@ -618,24 +739,10 @@ function Zone(screen, cushion){
         
         zone.removeCover();
     }
-    
-    var time_before;
-    var position_before;
-    
+        
     var refreshOnScroll = _.throttle(function(e){
-        var position = zone.element.scrollTop;
-        zone.change(position);
-        
-        if(time_before) {
-            var delta_t = e.timeStamp - time_before;
-            var delta_p = position - position_before;
-        }
-        time_before = e.timeStamp;
-        position_before = position;
-        
-        //console.log(delta_p/delta_t);
-        
-    }, 10, {leading: false});
+        zone.change(zone.element.scrollTop);
+    }, 30, {leading: false});
     
     var refreshOnResize = _.throttle(function(){
         zone.resize();
@@ -651,7 +758,7 @@ ZonePro.change = function(top, height){
     this.bottom = top + height;
     this.screen_height = height;
     
-    this.trigger('changed', this);
+    this.bus.trigger('zone.changed', this);
 }
 
 ZonePro.resize = function(){
@@ -761,44 +868,52 @@ var cover = {
 }
 
 
-var myApp = angular.module('myApp', []);
+var megascroller = angular.module('megascroller', []);
 
-
-var itemDirective = function(){
+megascroller.directive( 'transcope', function() {
     return {
-        restrict: 'E',
-        replace: true,
-        template: '<div class="item clickable"><span ng-if="item">{{::item.id}}.- {{::item.name}} {{::item.surname}}</span><span class="loading" ng-show="!item">loading...</span></div>',
-        link: function(scope, element, attrs){
-            var item_tag = scope; 
-            
-            item_tag.type = scope.type;
-            item_tag.number = parseInt(scope.number);
-            
-            var action = {
-                remove: item_tag.type + '_remove'
+        link: function( $scope, $element, $attrs, controller, $transclude ) {
+            if ( !$transclude ) {
+                throw minErr( 'ngTransclude' )( 'orphan',
+                    'Illegal use of ngTransclude directive in the template! ' +
+                    'No parent directive that requires a transclusion found. ' +
+                    'Element: {0}',
+                    startingTag( $element ));
             }
-        
-        }
-    }
-}
+            var innerScope = $scope.$new();
 
-myApp.directive('item', itemDirective);
+            $transclude( innerScope, function( clone ) {
+                $element.empty();
+                $element.append( clone );
+                $element.on( '$destroy', function() {
+                    innerScope.$destroy();
+                });
+            });
+        }
+    };
+}); 
 
 var megascrollerDirective = function(){
     return {
         restrict: 'A',
-        scope: {},
+        scope: {
+            options: '=megascroller' 
+        },
         replace: false,
-        template: '<div class="megascroller" ng-style="style"><item ng-repeat="item in displayed_bunch.items track by id($index)" type="item" number="{{ displayed_bunch.first + $index }}"></item></div><div class="info"><div>Total items: <span ng-bind="displayed_bunch.total_items"></span></div><div>Displayed: <span ng-bind="displayed_bunch.first"></span>, <span ng-bind="displayed_bunch.last"></span></div></div>',
+        transclude: true,
+        template: '<div class="megascroller" ng-style="style"><div ng-repeat="item in displayed_bunch.items track by id($index)" number="{{ displayed_bunch.first + $index }}" transcope></div></div><div class="info"><div>Total items: <span ng-bind="displayed_bunch.total_items"></span></div><div>Displayed: <span ng-bind="displayed_bunch.first"></span>, <span ng-bind="displayed_bunch.last"></span></div></div>',
         link: function(scope, element, attrs){
-            var megascroller_tag = scope;
-    
-            var item_store = new ItemStore(contact_api);
-            var megascroller = new Megascroller(item_store);
-            var zone = new Zone( element[0], height.page / 2);
+            scope.options = scope.options || {};
             
-            megascroller_tag.item_api = contact_api;
+            var megascroller_tag = scope;
+            var item_options = scope.options.item;
+    
+            var bus = new Events();
+            var item_store = new ItemStore(bus, item_options.api);
+            var megascroller = new Megascroller(bus, item_options);
+            var zone = new Zone(bus, element[0], megascroller.height.page / 2);
+            
+            megascroller_tag.item_api = item_options.api;
             megascroller_tag.displayed_bunch = null;
             megascroller_tag.padding_top = 0;
             megascroller_tag.height = 0;
@@ -809,8 +924,8 @@ var megascrollerDirective = function(){
             
             megascroller_tag.update = function(new_displayed_bunch){
                 scope.$evalAsync(function(){
-                    megascroller_tag.padding_top = (new_displayed_bunch.first || 0) * height.item;
-                    megascroller_tag.height = new_displayed_bunch.total_items * height.item;
+                    megascroller_tag.padding_top = (new_displayed_bunch.first || 0) * item_options.height;
+                    megascroller_tag.height = (new_displayed_bunch.total_items || 0) * item_options.height;
                     
                     megascroller_tag.style= {
                         'height': megascroller_tag.height+'px', 
@@ -821,11 +936,7 @@ var megascrollerDirective = function(){
                 });
             };
                     
-            item_store.on("changed", megascroller_tag.update);
-            
-            zone.on('changed', function(zone){
-                megascroller.trigger('refresh', zone);
-            });
+            bus.on("bunch.changed", megascroller_tag.update);
             
             megascroller_tag.$on('$destroy', function(){
                 zone.destroy();
@@ -837,12 +948,37 @@ var megascrollerDirective = function(){
     }
 }
 
-myApp.directive('megascroller', megascrollerDirective);
-
-$(document).ready(function() {
-    angular.bootstrap(document, ['myApp']);
+megascroller.directive('megascroller', megascrollerDirective);
+megascroller.constant('megascroller_default_options', {
+    
 });
 
+var demo = angular.module('demo', ['megascroller']);
+demo.controller('demoSettingsController', DemoSettingsController);
+
+function DemoSettingsController() {
+    this.megascroller_options = {
+        item: {
+            height: configuration.item_min_height,
+            template: 'contactTemplate.html',
+            api: contact_api,
+            per_page: configuration.items_per_page,
+            per_chapter: configuration.items_per_page * configuration.pages_per_chapter
+        },
+        onRegisterApi: function(megascroller_api) {
+        
+        }
+    }
+}
+
+DemoSettingsController.prototype.greet = function() {
+  alert('hello  world!');
+};
+
+
+$(document).ready(function() {
+    angular.bootstrap(document, ['demo']);
+});
 
 });//]]>  
 
