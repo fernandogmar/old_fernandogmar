@@ -931,7 +931,7 @@ var megascrollerDirective = function(){
                     
 
 			if(megascroller_tag.displayed_bunch.total_items !==  new_displayed_bunch.total_items){
-				Ps.update(element);
+				Ps.update(element[0]);
 			}
                     megascroller_tag.displayed_bunch = new_displayed_bunch;
 
@@ -943,11 +943,11 @@ var megascrollerDirective = function(){
             
             megascroller_tag.$on('$destroy', function(){
                 zone.destroy();
-		Ps.destroy(element);
+		Ps.destroy(element[0]);
             });
 
              zone.init();
-	     Ps.initialize(element);
+	     Ps.initialize(element[0]);
         
         }
     }
