@@ -930,7 +930,7 @@ var megascrollerDirective = function(){
                     };
                     
 
-			if(megascroller_tag.displayed_bunch.total_items !==  new_displayed_bunch.total_items){
+			if(!megascroller_tag.displayed_bunch || megascroller_tag.displayed_bunch.total_items !==  new_displayed_bunch.total_items){
 				Ps.update(element[0]);
 			}
                     megascroller_tag.displayed_bunch = new_displayed_bunch;
