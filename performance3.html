@@ -920,6 +920,7 @@ var megascrollerDirective = function(){
             
             megascroller_tag.update = function(new_displayed_bunch){
                 scope.$evalAsync(function(){
+
                     megascroller_tag.padding_top = (new_displayed_bunch.first || 0) * item_options.height;
                     megascroller_tag.height = (new_displayed_bunch.total_items || 0) * item_options.height;
                     
@@ -928,7 +929,13 @@ var megascrollerDirective = function(){
                         'padding-top': megascroller_tag.padding_top+'px'
                     };
                     
+
+			if(megascroller_tag.displayed_bunch.total_items !==  new_displayed_bunch.total_items){
+				Ps.update(element);
+			}
                     megascroller_tag.displayed_bunch = new_displayed_bunch;
+
+
                 });
             };
                     
@@ -936,9 +943,11 @@ var megascrollerDirective = function(){
             
             megascroller_tag.$on('$destroy', function(){
                 zone.destroy();
+		Ps.destroy(element);
             });
 
              zone.init();
+	     Ps.initialize(element);
         
         }
     }
@@ -974,9 +983,6 @@ DemoSettingsController.prototype.greet = function() {
 
 $(document).ready(function() {
     angular.bootstrap(document, ['demo']);
-        [].forEach.call(document.querySelectorAll('.container-list'), function (el) {
-          Ps.initialize(el);
-        });
 });
 
 });//]]>  
