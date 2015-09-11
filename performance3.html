@@ -947,7 +947,9 @@ var megascrollerDirective = function(){
             });
 
              zone.init();
-	     Ps.initialize(element[0]);
+	     Ps.initialize(element[0],   {
+		minScrollbarLength: 20
+		});
         
         }
     }
